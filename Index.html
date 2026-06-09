@@ -160,8 +160,8 @@
   /* ---------- output ---------- */
   .out-head{padding:20px 22px 0}
   .out-head .sec-label{margin-bottom:14px}
-  .models{display:flex;background:var(--bg-2);border:1px solid var(--line);border-radius:12px;padding:4px;gap:4px;margin-bottom:4px}
-  .models button{flex:1;background:none;border:none;cursor:pointer;color:var(--muted);font-family:var(--ui);font-weight:600;font-size:13px;padding:10px 6px;border-radius:9px;transition:.18s;position:relative}
+  .models{display:flex;flex-wrap:wrap;background:var(--bg-2);border:1px solid var(--line);border-radius:12px;padding:4px;gap:4px;margin-bottom:4px}
+  .models button{flex:1 1 auto;min-width:88px;background:none;border:none;cursor:pointer;color:var(--muted);font-family:var(--ui);font-weight:600;font-size:12.5px;padding:9px 6px;border-radius:9px;transition:.18s;position:relative}
   .models button .sub{display:block;font-size:10px;font-weight:500;color:var(--muted-2);margin-top:1px}
   .models button.on{color:var(--text);background:var(--panel-2);box-shadow:inset 0 0 0 1px var(--line-strong)}
   .models button.on::before{content:"";position:absolute;left:14px;right:14px;bottom:-4px;height:2px;border-radius:2px;background:var(--spectrum)}
@@ -271,9 +271,11 @@
       <div class="out-head">
         <div class="sec-label">Optimized prompt</div>
         <div class="models" id="models">
-          <button data-m="mj">Midjourney<span class="sub">v6.1 · params</span><span class="rec">best</span></button>
+          <button data-m="mj">Midjourney<span class="sub">v7 · params</span><span class="rec">best</span></button>
           <button data-m="nb">Nano Banana<span class="sub">/ GPT-Image</span><span class="rec">best</span></button>
           <button data-m="id">Ideogram<span class="sub">text · logos</span><span class="rec">best</span></button>
+          <button data-m="fl">Flux<span class="sub">1.1 · dense</span><span class="rec">best</span></button>
+          <button data-m="rc">Recraft<span class="sub">brand · vector</span><span class="rec">best</span></button>
         </div>
       </div>
       <div class="out-body">
@@ -391,7 +393,7 @@ const CATEGORIES = {
   }
 };
 
-const MODEL_NAME = {mj:"Midjourney", nb:"Nano Banana / GPT-Image", id:"Ideogram"};
+const MODEL_NAME = {mj:"Midjourney", nb:"Nano Banana / GPT-Image", id:"Ideogram", fl:"Flux", rc:"Recraft"};
 
 /* ============================================================
    INSPIRE — curated seeds + guarded randomizer
@@ -699,12 +701,64 @@ function serializeID(ir){
   };
 }
 
-const SERIALIZE = {mj:serializeMJ, nb:serializeNB, id:serializeID};
+const SERIALIZE = {mj:serializeMJ, nb:serializeNB, id:serializeID, fl:serializeFL, rc:serializeRC};
+
+// ---- Flux: dense descriptive natural-language clauses, no params ----
+function serializeFL(ir){
+  const seg=[];
+  let lead = cap(ir.medium||"image");
+  if(ir.subject) lead += " of "+ir.subject;
+  seg.push(lead);
+  ir.composition.forEach(c=>seg.push(c));
+  ir.descriptors.slice(0,9).forEach(d=>seg.push(d));
+  if(ir.lighting) seg.push(ir.lighting);
+  if(ir.palette) seg.push(ir.palette);
+  if(ir.mood) seg.push(ir.mood+" atmosphere");
+  if(ir.textContent) seg.push('with clear legible text reading "'+ir.textContent+'"');
+  const body = seg.filter(Boolean).join(", ");
+  const neg = ir.negatives.join(", ");
+  return {
+    body: body + ". Aspect ratio "+ir.ar+".",
+    params:["aspect "+ir.ar],
+    negDisplay:neg, negMode:"Avoid",
+    full: body + ". Aspect ratio "+ir.ar+"." + (neg? " Avoid: "+neg+"." : "")
+  };
+}
+
+// ---- Recraft: description + explicit style family + aspect (brand/vector strength) ----
+function recraftStyle(ir){
+  const m=(ir.medium||"").toLowerCase();
+  if(state.category==="logo") return ir.descriptors.some(d=>/abstract mark|pictorial/.test(d)) ? "icon" : "vector_illustration";
+  if(/flat vector|vector|line art/.test(m)) return "vector_illustration";
+  if(/illustration|watercolor|oil painting|risograph|anime|matte painting|paper collage|charcoal|claymation|double exposure/.test(m)) return "digital_illustration";
+  return "realistic_image";
+}
+function serializeRC(ir){
+  const style=recraftStyle(ir);
+  let s = cap(ir.medium||"design")+(ir.subject? " of "+ir.subject : "")+". ";
+  if(ir.composition.length) s += cap(ir.composition.join(", "))+". ";
+  if(ir.textContent){ s += 'Include the text "'+ir.textContent+'" rendered cleanly'+(ir.typoStyle?" in "+ir.typoStyle:"")+". "; }
+  const looks=ir.descriptors.slice(0,7).join(", ");
+  if(looks) s += cap(looks)+". ";
+  if(ir.palette) s += cap(ir.palette)+". ";
+  if(ir.lighting) s += cap(ir.lighting)+". ";
+  if(ir.mood) s += cap(ir.mood)+" mood. ";
+  s += "Style: "+style+". Aspect ratio "+ir.ar+".";
+  const neg=ir.negatives.join(", ");
+  return {
+    body:s.trim(), style:style,
+    params:["style "+style, "aspect "+ir.ar],
+    negDisplay:neg, negMode:"Avoid",
+    full: s.trim()+(neg? " Avoid: "+neg+"." : "")
+  };
+}
 
 /* model-specific rationale */
 function rationale(model, ir){
-  if(model==="mj") return "Built for <b>Midjourney v6.1</b>: weighted comma phrases front-loaded by importance, plus structural params. <b>--stylize "+STYLIZE[ir.detail]+"</b> matches your detail level; negatives ride in <b>--no</b>.";
+  if(model==="mj") return "Built for <b>Midjourney v7</b>: weighted comma phrases front-loaded by importance, plus structural params. <b>--stylize "+STYLIZE[ir.detail]+"</b> matches your detail level; negatives ride in <b>--no</b>.";
   if(model==="nb") return "Built for <b>Nano Banana / GPT-Image</b>: full natural-language scene description — these models read prose, not keyword soup. Negatives become an explicit <b>Avoid:</b> instruction since there's no negative param.";
+  if(model==="fl") return "Built for <b>Flux</b>: dense descriptive clauses without Midjourney-style params — Flux rewards rich detail in natural phrasing. Aspect ratio is stated plainly and negatives ride in an <b>Avoid:</b> line.";
+  if(model==="rc") return "Built for <b>Recraft</b>: a clean description plus an explicit <b>Style: "+recraftStyle(ir)+"</b> family — Recraft keys off its style system, which is why it holds brand and vector consistency. Text is flagged to render cleanly.";
   return "Built for <b>Ideogram</b>: text-first phrasing — the in-image copy is quoted and flagged to spell correctly, which is why it's the pick for "+(state.category==="logo"?"logos":"text-heavy work")+".";
 }
 
@@ -733,7 +787,7 @@ function render(){
   } else {
     // highlight quoted text
     disp = disp.replace(/&quot;([^&]*?)&quot;/g,'&quot;<span class="em">$1</span>&quot;');
-    disp = disp.replace(/(--ar [0-9:]+|Aspect ratio [0-9:]+)/g,'<span class="par">$1</span>');
+    disp = disp.replace(/(--ar [0-9:]+|Aspect ratio [0-9:]+|Style: [a-z_]+)/g,'<span class="par">$1</span>');
   }
   pt.innerHTML = disp;
 
@@ -742,6 +796,7 @@ function render(){
   chips.push('<span class="chip">model · <b>'+MODEL_NAME[state.model]+'</b></span>');
   chips.push('<span class="chip">ratio · <b>'+ir.ar+'</b></span>');
   if(state.model==="mj") chips.push('<span class="chip">stylize · <b>'+STYLIZE[ir.detail]+'</b></span>');
+  if(state.model==="rc" && ser.style) chips.push('<span class="chip">style · <b>'+ser.style+'</b></span>');
   chips.push('<span class="chip">detail · <b>'+({min:"minimal",bal:"balanced",rich:"rich"})[ir.detail]+'</b></span>');
   document.getElementById("chips").innerHTML = chips.join("");
 
