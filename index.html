@@ -290,8 +290,7 @@
     if(busy) return; busy=true;
     var other=current==="image"?"video":"image";
     veilWord.textContent="Imagend";
-    loader.classList.remove("gone");
-    if(reduce){show(other);busy=false;return;}
+    if(reduce){show(other);loader.classList.add("gone");busy=false;return;}
     veil.setAttribute("aria-hidden","false");
     veil.className="portal-veil opening";
     setTimeout(function(){
@@ -299,7 +298,7 @@
       veil.className="portal-veil arrived";
       requestAnimationFrame(function(){requestAnimationFrame(function(){
         veil.className="portal-veil closing";
-        setTimeout(function(){veil.className="portal-veil";veil.setAttribute("aria-hidden","true");busy=false;},1050);
+        setTimeout(function(){veil.className="portal-veil";veil.setAttribute("aria-hidden","true");loader.classList.add("gone");busy=false;},1050);
       });});
     },620);
   });
